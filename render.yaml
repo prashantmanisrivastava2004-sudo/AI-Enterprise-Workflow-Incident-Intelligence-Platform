@@ -1,0 +1,8 @@
+﻿services:
+  - type: web
+    name: incident-intelligence-api
+    env: python
+    plan: standard
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
