@@ -74,7 +74,9 @@ function App() {
     setResult(null);
 
     try {
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+      const apiBaseUrl =
+        import.meta.env.VITE_API_BASE_URL ??
+        "https://incident-intelligence-api.onrender.com";
       const response = await fetch(`${apiBaseUrl}/analyze-ticket`, {
         method: "POST",
         headers: {
@@ -94,7 +96,7 @@ function App() {
     } catch (err) {
       console.error(err);
       setError(
-        "Couldn't connect to the backend. Make sure FastAPI is running on port 8000."
+        "Couldn't connect to the deployed backend. Please verify the API URL or try again later."
       );
     } finally {
       setLoading(false);

@@ -35,10 +35,11 @@ allowed_origins = [
     if origin.strip()
 ]
 
-# Allow React frontend to communicate with FastAPI
+# Allow Vercel deployments and local frontend origins.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*ai-enterprise-workflow-incident-t5e.vercel.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
