@@ -27,7 +27,7 @@ app = FastAPI(
 
 frontend_origins = os.getenv(
     "CORS_ORIGINS",
-    "http://localhost:5173,http://127.0.0.1:5173",
+    "http://localhost:5173,http://127.0.0.1:5173, https://ai-enterprise-workflow-incident.onrender.com","https://ai-enterprise-workflow-incident-t5e.vercel.app/",
 )
 allowed_origins = [
     origin.strip()
@@ -39,7 +39,7 @@ allowed_origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"https://.*ai-enterprise-workflow-incident-t5e.vercel.app",
+    allow_origin_regex=r"https://.*\.ai-enterprise-workflow-incident-t5e\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
