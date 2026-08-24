@@ -32,7 +32,7 @@ frontend_origins = os.getenv(
     "https://ai-enterprise-workflow-incident-t5e.vercel.app",
 )
 allowed_origins = [
-    or  igin.strip()
+    origin.strip()
     for origin in frontend_origins.split(",")
     if origin.strip()
 ]
