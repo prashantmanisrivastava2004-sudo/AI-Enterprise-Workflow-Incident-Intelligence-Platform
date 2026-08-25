@@ -76,7 +76,7 @@ function App() {
     try {
       const apiBaseUrl =
         import.meta.env.VITE_API_BASE_URL ??
-        "https://incident-intelligence-api.onrender.com";
+        "https://ai-enterprise-workflow-incident.onrender.com";
       const response = await fetch(`${apiBaseUrl}/analyze-ticket`, {
         method: "POST",
         headers: {
