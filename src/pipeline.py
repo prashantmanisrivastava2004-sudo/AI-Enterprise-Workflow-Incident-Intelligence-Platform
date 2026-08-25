@@ -45,9 +45,10 @@ TICKETS_PATH = DATA_DIR / "cleaned_tickets.csv"
 # ============================================================
 # OLLAMA SETTINGS
 # ============================================================
-OLLAMA_URL = "http://localhost:11434/api/generate"
-OLLAMA_TAGS_URL = "http://localhost:11434/api/tags"
-OLLAMA_MODEL = "llama3.2:3b"
+OLLAMA_BASE_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_URL = f"{OLLAMA_BASE_URL}/api/generate"
+OLLAMA_TAGS_URL = f"{OLLAMA_BASE_URL}/api/tags"
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 
 
 # ============================================================
@@ -138,7 +139,7 @@ Resolution: {incident['answer']}
 
 def _generate_resolution(ticket, predicted_type, predicted_queue,
                          predicted_priority, retrieved_context):
-    """Generate a grounded resolution using local Ollama."""
+    """Generate a grounded resolution using local Ollama with retry logic."""
     prompt = f"""
 You are an IT helpdesk assistant.
 
@@ -173,21 +174,39 @@ Keep the answer under 100 words.
         },
     }
 
-    response = requests.post(
-        OLLAMA_URL,
-        json=payload,
-        timeout=300,
-    )
-    response.raise_for_status()
+    max_retries = 3
+    retry_count = 0
+    
+    while retry_count < max_retries:
+        try:
+            response = requests.post(
+                OLLAMA_URL,
+                json=payload,
+                timeout=300,  # 5 minutes timeout for Ollama generation
+            )
+            response.raise_for_status()
 
-    response_json = response.json()
+            response_json = response.json()
 
-    if "response" not in response_json:
-        raise RuntimeError(
-            f"Ollama response did not contain 'response': {response_json}"
-        )
+            if "response" not in response_json:
+                raise RuntimeError(
+                    f"Ollama response did not contain 'response': {response_json}"
+                )
 
-    return response_json["response"].strip()
+            return response_json["response"].strip()
+        
+        except (requests.Timeout, requests.ConnectionError) as e:
+            retry_count += 1
+            print(f"Ollama timeout/connection error (attempt {retry_count}/{max_retries}): {e}")
+            if retry_count < max_retries:
+                import time
+                time.sleep(2)  # Wait 2 seconds before retry
+                continue
+            raise RuntimeError(f"Ollama failed after {max_retries} retries: {e}")
+        
+        except Exception as e:
+            print(f"Ollama error: {type(e).__name__}: {e}")
+            raise
 
 
 def check_ollama():
