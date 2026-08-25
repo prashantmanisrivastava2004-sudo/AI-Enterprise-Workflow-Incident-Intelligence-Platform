@@ -27,7 +27,7 @@ app = FastAPI(
 
 frontend_origins = os.getenv(
     "CORS_ORIGINS",
-    "http://localhost:5173,http://127.0.0.1:5173,"
+    "*,http://localhost:5173,http://127.0.0.1:5173,"
     "https://ai-enterprise-workflow-incident.onrender.com,"
     "https://ai-enterprise-workflow-incident-t5e.vercel.app",
 )
@@ -37,12 +37,12 @@ allowed_origins = [
     if origin.strip()
 ]
 
-# Allow Vercel deployments and local frontend origins.
+# Allow Vercel deployments, Render, and local frontend origins.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",
-    allow_credentials=True,
+    allow_origins=allowed_origins if "*" not in allowed_origins else ["*"],
+    allow_origin_regex=r"https://.*\.vercel\.app|https://.*\.onrender\.com",
+    allow_credentials=True if "*" not in allowed_origins else False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -55,8 +55,14 @@ class TicketRequest(BaseModel):
 @app.get("/")
 def root():
     return {
+        "status": "healthy",
         "message": "AI Enterprise Workflow & Incident Intelligence API is running"
     }
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 
 @app.post("/analyze-ticket")

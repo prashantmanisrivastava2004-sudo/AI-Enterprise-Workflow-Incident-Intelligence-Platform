@@ -74,9 +74,11 @@ function App() {
     setResult(null);
 
     try {
-      const apiBaseUrl =
-        import.meta.env.VITE_API_BASE_URL ??
+      const rawApiBaseUrl =
+        import.meta.env.VITE_API_BASE_URL ||
         "https://ai-enterprise-workflow-incident.onrender.com";
+      const apiBaseUrl = rawApiBaseUrl.replace(/\/+$/, "");
+      
       const response = await fetch(`${apiBaseUrl}/analyze-ticket`, {
         method: "POST",
         headers: {
@@ -88,7 +90,18 @@ function App() {
       });
 
       if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
+        let errDetails = "";
+        try {
+          const errJson = await response.json();
+          errDetails = errJson.detail || errJson.message || "";
+        } catch {
+          // Ignore JSON parse errors
+        }
+        throw new Error(
+          errDetails
+            ? `Server Error (${response.status}): ${errDetails}`
+            : `API request failed with status ${response.status}`
+        );
       }
 
       const data = await response.json();
@@ -96,6 +109,7 @@ function App() {
     } catch (err) {
       console.error(err);
       setError(
+        err.message ||
         "Couldn't connect to the deployed backend. Please verify the API URL or try again later."
       );
     } finally {

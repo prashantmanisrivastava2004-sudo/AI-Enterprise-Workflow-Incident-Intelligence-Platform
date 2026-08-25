@@ -8,7 +8,7 @@ RUN npm ci
 
 COPY . .
 
-ARG VITE_API_BASE_URL=https://ai-enterprise-workflow-incident-t5e.vercel.app/
+ARG VITE_API_BASE_URL=https://ai-enterprise-workflow-incident.onrender.com
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 RUN npm run build

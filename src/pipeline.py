@@ -138,8 +138,25 @@ Resolution: {incident['answer']}
 
 
 def _generate_resolution(ticket, predicted_type, predicted_queue,
-                         predicted_priority, retrieved_context):
-    """Generate a grounded resolution using local Ollama with retry logic."""
+                         predicted_priority, retrieved_context, retrieved_incidents=None):
+    """Generate a grounded resolution using local Ollama, falling back gracefully if unavailable."""
+    # Check if Ollama is reachable first before attempting heavy network calls
+    if not check_ollama():
+        print("Ollama server unreachable. Generating fallback resolution from historical evidence.")
+        if retrieved_incidents and len(retrieved_incidents) > 0:
+            top_match = retrieved_incidents[0]
+            answer_text = top_match.get('answer', 'Investigate log trace and verify credentials.')
+            return (
+                f"1. Likely Issue: {top_match.get('type', predicted_type)} incident.\n"
+                f"2. Recommended Action: {answer_text}\n"
+                f"3. Queue / Priority: Assigned to {predicted_queue} with {predicted_priority} priority."
+            )
+        return (
+            f"1. Likely Issue: {predicted_type} issue.\n"
+            f"2. Action: Verify credentials and check system logs.\n"
+            f"3. Escalate: Assigned to {predicted_queue} ({predicted_priority} priority)."
+        )
+
     prompt = f"""
 You are an IT helpdesk assistant.
 
@@ -174,7 +191,7 @@ Keep the answer under 100 words.
         },
     }
 
-    max_retries = 3
+    max_retries = 2
     retry_count = 0
     
     while retry_count < max_retries:
@@ -182,7 +199,7 @@ Keep the answer under 100 words.
             response = requests.post(
                 OLLAMA_URL,
                 json=payload,
-                timeout=300,  # 5 minutes timeout for Ollama generation
+                timeout=10,  # Shorter timeout for quick failure/fallback in web requests
             )
             response.raise_for_status()
 
@@ -195,18 +212,29 @@ Keep the answer under 100 words.
 
             return response_json["response"].strip()
         
-        except (requests.Timeout, requests.ConnectionError) as e:
+        except (requests.Timeout, requests.ConnectionError, Exception) as e:
             retry_count += 1
-            print(f"Ollama timeout/connection error (attempt {retry_count}/{max_retries}): {e}")
+            print(f"Ollama attempt {retry_count}/{max_retries} failed: {e}")
             if retry_count < max_retries:
                 import time
-                time.sleep(2)  # Wait 2 seconds before retry
+                time.sleep(1)
                 continue
-            raise RuntimeError(f"Ollama failed after {max_retries} retries: {e}")
-        
-        except Exception as e:
-            print(f"Ollama error: {type(e).__name__}: {e}")
-            raise
+            
+    # Fallback if all retries fail
+    print("Ollama retries exhausted. Returning fallback resolution.")
+    if retrieved_incidents and len(retrieved_incidents) > 0:
+        top_match = retrieved_incidents[0]
+        answer_text = top_match.get('answer', 'Investigate log trace and verify credentials.')
+        return (
+            f"1. Likely Issue: {top_match.get('type', predicted_type)} incident.\n"
+            f"2. Recommended Action: {answer_text}\n"
+            f"3. Queue / Priority: Assigned to {predicted_queue} with {predicted_priority} priority."
+        )
+    return (
+        f"1. Likely Issue: {predicted_type} issue.\n"
+        f"2. Action: Verify credentials and check system logs.\n"
+        f"3. Escalate: Assigned to {predicted_queue} ({predicted_priority} priority)."
+    )
 
 
 def check_ollama():
@@ -344,6 +372,7 @@ def analyze_ticket(ticket, top_k=5):
         predicted_queue=predicted_queue,
         predicted_priority=predicted_priority,
         retrieved_context=retrieved_context,
+        retrieved_incidents=retrieved_incidents,
     )
 
     # ========================================================
