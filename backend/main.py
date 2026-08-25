@@ -16,8 +16,6 @@ from src.pipeline import analyze_ticket
 
 
 def get_analyzer():
-    """Import the ML pipeline lazily so startup stays fast."""
-    from src.pipeline import analyze_ticket
     return analyze_ticket
 
 
