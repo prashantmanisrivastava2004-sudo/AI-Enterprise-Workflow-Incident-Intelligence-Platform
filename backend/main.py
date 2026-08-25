@@ -11,11 +11,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# Preload ML models during server startup so ticket analysis runs instantly
-from src.pipeline import analyze_ticket
-
-
 def get_analyzer():
+    """Import the ML pipeline lazily so startup stays fast and port binding is instant."""
+    from src.pipeline import analyze_ticket
     return analyze_ticket
 
 

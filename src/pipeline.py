@@ -52,38 +52,65 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 
 
 # ============================================================
-# LOAD MODELS AND DATA
+# LOAD MODELS AND DATA LAZILY
 # ============================================================
-print("Loading AI ticket analysis components...")
+_components = None
 
-category_model = joblib.load(CATEGORY_MODEL_PATH)
-category_tfidf = joblib.load(CATEGORY_TFIDF_PATH)
 
-priority_model = joblib.load(PRIORITY_MODEL_PATH)
-priority_tfidf = joblib.load(PRIORITY_TFIDF_PATH)
-category_encoder = joblib.load(CATEGORY_ENCODER_PATH)
+def _get_pipeline_components():
+    """Lazy load and cache ML components only when needed, staying within 512MB RAM."""
+    global _components
+    if _components is not None:
+        return _components
 
-queue_model = joblib.load(QUEUE_MODEL_PATH)
-queue_tfidf = joblib.load(QUEUE_TFIDF_PATH)
+    import faiss
+    import torch
 
-index = faiss.read_index(str(FAISS_INDEX_PATH))
-ticket_embeddings = np.load(TICKET_EMBEDDINGS_PATH)
+    # Prevent PyTorch multi-threading to prevent OOM on 512MB Render free tier
+    torch.set_num_threads(1)
+    
+    from sentence_transformers import SentenceTransformer
 
-retrieval_df = pd.read_csv(TICKETS_PATH)
+    print("Loading AI ticket analysis components into memory...")
 
-# Same embedding model used to create the saved FAISS embeddings.
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+    category_model = joblib.load(CATEGORY_MODEL_PATH)
+    category_tfidf = joblib.load(CATEGORY_TFIDF_PATH)
 
-print("All models and files loaded successfully!")
-print(f"FAISS vectors: {index.ntotal}")
-print(f"Ticket embeddings shape: {ticket_embeddings.shape}")
-print(f"Retrieval dataset shape: {retrieval_df.shape}")
+    priority_model = joblib.load(PRIORITY_MODEL_PATH)
+    priority_tfidf = joblib.load(PRIORITY_TFIDF_PATH)
+    category_encoder = joblib.load(CATEGORY_ENCODER_PATH)
+
+    queue_model = joblib.load(QUEUE_MODEL_PATH)
+    queue_tfidf = joblib.load(QUEUE_TFIDF_PATH)
+
+    index = faiss.read_index(str(FAISS_INDEX_PATH))
+    ticket_embeddings = np.load(TICKET_EMBEDDINGS_PATH)
+    retrieval_df = pd.read_csv(TICKETS_PATH)
+
+    embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+
+    _components = {
+        "category_model": category_model,
+        "category_tfidf": category_tfidf,
+        "priority_model": priority_model,
+        "priority_tfidf": priority_tfidf,
+        "category_encoder": category_encoder,
+        "queue_model": queue_model,
+        "queue_tfidf": queue_tfidf,
+        "index": index,
+        "ticket_embeddings": ticket_embeddings,
+        "retrieval_df": retrieval_df,
+        "embedding_model": embedding_model,
+    }
+
+    print("All models loaded successfully!")
+    return _components
 
 
 # ============================================================
 # HELPERS
 # ============================================================
-def _encode_priority_metadata(predicted_queue, predicted_type):
+def _encode_priority_metadata(category_encoder, predicted_queue, predicted_type):
     """
     Encode queue + type for the priority model.
 
@@ -257,28 +284,6 @@ def check_ollama():
 def analyze_ticket(ticket, top_k=5):
     """
     Run one support ticket through the complete AI pipeline.
-
-    Workflow:
-        Ticket
-        -> Category prediction
-        -> Queue prediction
-        -> Priority prediction
-        -> Sentence Transformer embedding
-        -> FAISS similarity search
-        -> RAG context
-        -> Ollama grounded resolution
-
-    Parameters
-    ----------
-    ticket : str
-        Support ticket text.
-    top_k : int, default=5
-        Number of similar historical incidents to retrieve.
-
-    Returns
-    -------
-    dict
-        Complete ticket analysis.
     """
     if not isinstance(ticket, str) or not ticket.strip():
         raise ValueError("ticket must be a non-empty string")
@@ -287,6 +292,18 @@ def analyze_ticket(ticket, top_k=5):
 
     if top_k <= 0:
         raise ValueError("top_k must be greater than 0")
+
+    comp = _get_pipeline_components()
+    category_model = comp["category_model"]
+    category_tfidf = comp["category_tfidf"]
+    priority_model = comp["priority_model"]
+    priority_tfidf = comp["priority_tfidf"]
+    category_encoder = comp["category_encoder"]
+    queue_model = comp["queue_model"]
+    queue_tfidf = comp["queue_tfidf"]
+    index = comp["index"]
+    retrieval_df = comp["retrieval_df"]
+    embedding_model = comp["embedding_model"]
 
     # Never ask FAISS for more rows than the available index.
     top_k = min(top_k, index.ntotal)
@@ -309,6 +326,7 @@ def analyze_ticket(ticket, top_k=5):
     priority_vector = priority_tfidf.transform([ticket])
 
     priority_metadata = _encode_priority_metadata(
+        category_encoder,
         predicted_queue,
         predicted_type,
     )
